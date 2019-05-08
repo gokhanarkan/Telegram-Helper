@@ -9,7 +9,7 @@
 -----------
 # helper.py
 | Commands          | Use           |
-| -------------
+| ----------------- |:----------------------------------------------:|
 | /database | Creates an SQLite database from the participants. |
 | /on | Mentions and call everyone. Useful if users muted the group.|
 | /all | Shouts a specific message written with the command. |

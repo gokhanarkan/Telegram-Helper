@@ -1,4 +1,7 @@
 # telegramHelperBot
+![Unrelated Image](https://i.postimg.cc/cHR3zx9j/Screenshot-2019-05-08-at-2-25-07-pm.png)
+
+-----------
 - In-development Telegram bot strictly designed for message groups.
 - This repo is for reference only. The original repo is private.
 - If you need access or have any ideas, please [message me](https://telegram.me/gokan)
@@ -6,7 +9,7 @@
 -----------
 # helper.py
 | Commands          | Use           |
-| ----------------- |:----------------------------------------------:|
+| -------------
 | /database | Creates an SQLite database from the participants. |
 | /on | Mentions and call everyone. Useful if users muted the group.|
 | /all | Shouts a specific message written with the command. |

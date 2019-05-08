@@ -1,17 +1,5 @@
-import telebot
-import forecastio
-import requests
-import json
-import logger
-import feedparser
-import time
-import pafy
-import youtube_dl
-import os.path
-import asyncio
+import telebot, forecastio, requests, json, logger, feedparser, time, pafy, youtube_dl, os.path, asyncio, telepot, sqlite3, geocoder
 from telethon import TelegramClient, sync
-import telepot
-import sqlite3
 
 # ai_lin_bot api token
 api_token = "PASTE YOUR TOKEN HERE"
@@ -39,36 +27,48 @@ client.start(bot_token = "TOKEN")
 # initialise asyncio loop to use some functions from core telegram api
 loop = asyncio.get_event_loop()
 
-@bot.message_handler(commands=['database'])
-def db(message):
-    if(message.from_user.id == GROUP_ADMIN): # To prevent to access only the admins can use the database
+@bot.message_handler(commands=['tables'])
+def createTables(message):
+    if(message.from_user.id == BOT_ADMIN):  # To prevent to access only the admins can use the database
         try:
-            # classic SQLite table creating and putting the relevant information by iterating the members
-            cur = connection.cursor()
-            cur.execute("""CREATE TABLE groups (group_id integer, people text)""")
-            for person in client.iter_participants(message.chat.id):
-                if (person.username == YOUR BOTS ID): # personal preference
-                    pass
-                else:
-                    cur.execute("INSERT INTO groups VALUES (?, ?)", (message.chat.id, str(person.username)))
-                    bot.send_message(message.chat.id, "{} added.".format(person.username))
-            connection.commit()
+            try:
+                # classic SQLite table creating and putting the relevant information by iterating the members
+                cur = connection.cursor()
+                cur.execute(
+                    """CREATE TABLE groups (group_id integer, people text)""")
+                cur.execute(
+                    """CREATE TABLE locations (person integer, location text)""")
+                connection.commit()
+                print('database created')
+            finally:
+                cur.close()
         except:
             pass
     else:
-        bot.send_message(message.chat.id, "Database has been already added. Try to delete it first.")
+        bot.send_message(message.chat.id, "Owner permission is required.")
 
-# Deleting database and reimplementing is in-development
-
-# @bot.message_handler(commands=['deletedatabase'])
-# def deletedb(message):
-#     try:
-#         if(databaseWarning > 0):
-#             os.remove('database/groups.db')
-#             databaseWarning -= 1
-#             bot.send_message(message.chat.id, 'Database deleted.')
-#     except:
-#         pass
+@bot.message_handler(commands=['db'])
+def db(message):
+    try:
+        try:
+            cur = connection.cursor()
+            cur.execute("SELECT * FROM groups WHERE group_id = ?",
+                        (message.chat.id,))
+            value = cur.fetchone()
+            print(value)
+            if (value == None):
+                for person in client.iter_participants(message.chat.id):
+                    if (person.username == 'BOTNAME':   # This is a personal preference as well
+                        pass
+                    else:
+                        cur.execute("INSERT INTO groups VALUES (?, ?)",
+                                    (message.chat.id, str(person.username)))
+                        print("{} added.".format(person.username))
+                connection.commit()
+        finally:
+            cur.close()
+    except:
+        pass
 
 # We play online games together and the group is muted almost always. This command is for in order to breach that mute barrier:
 @bot.message_handler(commands=['on'])
@@ -104,46 +104,129 @@ def kom(message):
         message_variable = telepot.message_identifier(sent_message)
         pot.editMessageText(message_variable, edited_message)
 
+# Now weather uses the database tables
 @bot.message_handler(commands=['weather'])
-def weather(message):
-    # This function is pre-programmed just for the members. I am leaving some possible examples here.
-    # Basically, the cities are already written for users. If I ask for the weather, the bot responds it with my location only. It varies to the users.
-    # Database will be implemented for this feature. It will also be possible to write: "/weather Paris" and the bot will change the location for the specific individual until a new city will be used.
-    city = ""
-    if message.from_user.id == 123456789: city = 'London'
-    elif (message.from_user.id == 123456789): city = 'Istanbul'
-    elif (message.from_user.id == 123456789): city = 'Ankara'
-    else: bot.send_message(message.chat.id, "I don't think I know you."); return
-
-    open_api = "WEATHER API"
-    url = open_api + city
-    if city == 'London': city = 'Londra'
-    data = requests.get(url).json()
-    # I used openweather, the json data was in kelvin. So, conversion it is!
-    temp_min = data['main']['temp_min'] - 273.15
-    temp_max = data['main']['temp_max'] - 273.15
-    weather_message = "In {} the current forecast is:\n" \
+def hava(message):
+    if(message.text == '/weather'):
+        try:
+            try:
+                cur = connection.cursor()
+                cur.execute("SELECT * FROM locations WHERE person = ?", (message.from_user.id,))
+                city = cur.fetchone()[1]
+                fetchWeather(message, city)
+            finally:
+                cur.close()
+        except:
+            bot.reply_to(message, 'Please define your location. You can define it by writing /hava and the City/Street name.'
+                                  '\nAlternatively, /location will change your location without API call.'
+                                  '\nEg: /lokasyon Queens')
+    else:
+        msg = message.text.split('/weather ')
+        try:
+            try:
+                cur = connection.cursor()
+                cur.execute("SELECT * FROM locations WHERE person = ?", (message.from_user.id,))
+                value = cur.fetchone()
+                if(value == None):
+                    cur.execute("INSERT INTO locations VALUES (?, ?)", (message.from_user.id, msg[1]))
+                    connection.commit()
+                    cur.execute("SELECT * FROM locations WHERE person = ?", (message.from_user.id,))
+                    city = cur.fetchone()[1]
+                    fetchWeather(message, city)
+                    connection.commit()
+                else:
+                    cur.execute("SELECT * FROM locations WHERE person = ?", (message.from_user.id,))
+                    cur.execute("UPDATE locations SET location = ?", (msg[1],))
+                    connection.commit()
+                    cur.execute("SELECT * FROM locations WHERE person = ?", (message.from_user.id,))
+                    city = cur.fetchone()[1]
+                    fetchWeather(message, city)
+                    connection.commit()
+            finally:
+                cur.close()
+        except:
+            pass
+def fetchWeather(message, city):
+    open_api = "WEATHER API HERE"
+    try:
+        url = open_api + city
+        data = requests.get(url).json()
+        # I used openweather, the json data was in kelvin. So, conversion it is!
+        temp_min = data['main']['temp_min'] - 273.15
+        temp_max = data['main']['temp_max'] - 273.15
+        weather_message="In {} the current forecast is:\n" \
                         "\nMinimum: {}°C"\
                         "\nMaximum: {}°C"\
-        .format(city, round(temp_min, 1), round(temp_max, 1))
-    bot.reply_to(message, weather_message)
+            .format(city, round(temp_min, 1), round(temp_max, 1))
+        bot.reply_to(message, weather_message)
+    except:
+        bot.reply_to(message, 'Please define your location.')
+
+# Changing user location without API call
+@bot.message_handler(commands=['location'])
+def location(message):
+    try:
+        try:
+            cur=connection.cursor()
+            msg=message.text.split('/location ')
+            if(len(msg) > 1):
+                try:
+                    cur.execute(
+                        "SELECT * FROM locations WHERE person = ?", (message.from_user.id,))
+                    value=cur.fetchone()
+                    if (value == None):
+                        cur.execute("INSERT INTO locations VALUES (?, ?)",
+                                    (message.from_user.id, msg[1]))
+                        connection.commit()
+                    else:
+                        cur.execute(
+                            "SELECT * FROM locations WHERE person = ?", (message.from_user.id,))
+                        cur.execute(
+                            "UPDATE locations SET location = ?", (msg[1],))
+                        connection.commit()
+                except:
+                    pass
+            else:
+                bot.reply_to(message, "Please type the city or street after the command.")
+        finally:
+            cur.close()
+    except:
+        pass
 
 # Detailed weather in natural language
 @bot.message_handler(commands=['wdetail'])
 def weather(message):
-    api_key = "WEATHER API FORECASTIO"
-    forecast = forecastio.load_forecast(api_key, lat='LAT', lng='LONG')
-    # Hourly data point with string manipulation
-    j = str(forecast.hourly())
-    j = j.replace("<ForecastioDataBlock instance: ", "")
-    j = j.replace(" with 49 ForecastioDataPoints>", "")
-    # Daily data point with string manipulation
-    i = str(forecast.daily())
-    i = i.replace("<ForecastioDataBlock instance: ", "")
-    i = i.replace(" with 8 ForecastioDataPoints>", "")
-    bot.reply_to(message, "Hi,")
-    bot.send_message(message.chat.id, j)
-    bot.send_message(message.chat.id, i)
+    api_key="API KEY FORECASTIO"
+    bing_key='BING KEY TO GENERATE GEOLOCATION'
+    if (message.text == '/wdetail'):
+        try:
+            try:
+                cur=connection.cursor()
+                cur.execute("SELECT * FROM locations WHERE person = ?",
+                            (message.from_user.id,))
+                value=cur.fetchone()[1]
+                g=geocoder.bing(value, key=bing_key).latlng
+                forecast=forecastio.load_forecast(
+                    api_key, lat=g[0], lng=g[1], lang='tr')
+                # Hourly data point with string manipulation
+                j=str(forecast.hourly())
+                j=j.replace("<ForecastioDataBlock instance: ", "")
+                j=j.replace(" with 49 ForecastioDataPoints>", "")
+                # Daily data point with string manipulation
+                i=str(forecast.daily())
+                i=i.replace("<ForecastioDataBlock instance: ", "")
+                i=i.replace(" with 8 ForecastioDataPoints>", "")
+                bot.reply_to(message, value)
+                bot.send_message(message.chat.id, j)
+                bot.send_message(message.chat.id, i)
+            finally:
+                cur.close()
+        except:
+            bot.reply_to(message, "An unexpected journey, ehm sorry, error happened.")  # Who doesn't like The Hobbit anyway?
+            pass
+    else:
+        bot.reply_to(
+            message, "Please define location with the /location command.")
 
 # YouTube video downloader
 # It might be illegal. I am not responsible.

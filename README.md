@@ -17,6 +17,7 @@
 | /wdetail | Gives the forecast details in natural language. |
 | /yt | Downloads the youtube video linked.  |
 | /ytmusic | Downloads the youtube video as a music file |
+| /topr | Generates all time top posts of the given subreddit |
 
 | Passive          | Use           |
 | ----------------- |:----------------------------------------------:|

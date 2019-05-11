@@ -8,6 +8,7 @@ pot = telepot.Bot(api_token)
 
 # database connection
 connection = sqlite3.connect('database/groups.db', check_same_thread=False)
+connection = sqlite3.connect('database/locations.db', check_same_thread=False, timeout=10)
 
 reddit = {
     'username': 'USERNAME',
@@ -23,6 +24,19 @@ imgur_client_id = 'IMGUR CLIENT ID'
 imgur_client_secret = 'IMGUR SECRET'
 client = TelegramClient("session_name", api_id, api_hash)
 client.start(bot_token = "TOKEN")
+
+# Reddit API requires an access token to perform GET and POST requests. This function will return a dict which includes access token and user agent
+def access_token(user):
+    client_auth = requests.auth.HTTPBasicAuth(
+        user['client_id'], user['client_secret'])
+    post_data = {"grant_type": "password",
+                 "username": user['username'], "password": user['password']}
+    response = requests.post("https://www.reddit.com/api/v1/access_token", auth=client_auth, data=post_data, headers={
+        "User-Agent": user['user_agent']
+    })
+    response_dict = response.json()
+    response_dict.update({'user_agent': user['user_agent']})
+    return response_dict
 
 # initialise asyncio loop to use some functions from core telegram api
 loop = asyncio.get_event_loop()
@@ -383,6 +397,38 @@ def usd(amount, converted_amount):
     return "${} approximately equals to {}₺.".format(round(amount, 2), round(converted_amount, 2))
 
 
+# Reddit TOP POSTS generator for lazy people
+
+# Command operator
+@bot.message_handler(commands=['topr'])
+def retrieve_sub(message):
+    msg=message.text.split('/topr ')
+    if (len(msg) > 1):
+        try:
+            tops=top_posts(access_token(reddit), msg[1])
+            iterate_posts(tops, message)
+        except:
+            pass
+
+# Generating the top posts list with the authorization token
+def top_posts(access_token, subreddit):
+    headers={
+        "Authorization": "{} {}".format(access_token['token_type'], access_token['access_token']),
+        "User-Agent": access_token['user_agent']
+                            }
+    params={'t': 'all'}
+    link='https://oauth.reddit.com/r/' + subreddit + '/top'
+    response=requests.get(link, headers=headers, params=params)
+    return response.json()['data']['children']
+
+# Iterating the children of the data
+def iterate_posts(topList, message):
+    n=0
+    while(n < 25):
+        send_media_to(message.chat.id, message.message_id,
+                            topList[n], with_caption=True)
+        n += 1
+
 # Reddit Media Grabber
 # Takes the media embedded within the post and sends to the group chat within 1 to 3 seconds.
 # So participants of the message group don't need to switch between apps or click on the link.
@@ -390,22 +436,14 @@ def usd(amount, converted_amount):
 # Below there are methods. The bot grabs everything smaller than 50mb. From Reddit, imgur, gfycat whatever you need.
 
 # Being lazy to comment things right now, that doesn't mean I code without comments, the comments were in my native tongue and I deleted it. I will add the english ones soon.
-def access_token(user):
-    client_auth = requests.auth.HTTPBasicAuth(user['client_id'], user['client_secret'])
-    post_data = {"grant_type": "password", "username": user['username'], "password": user['password']}
-    response = requests.post("https://www.reddit.com/api/v1/access_token", auth=client_auth, data=post_data, headers={
-        "User-Agent": user['user_agent']
-    })
-    response_dict = response.json()
-    response_dict.update({'user_agent': user['user_agent']})
-    return response_dict
+
 def is_reddit_link(message):
     if message.entities:
         for entity in message.entities:
             if entity.type == 'url':
                 url = message.text[entity.offset: entity.offset+entity.length]
                 if 'www.reddit.com' in url.split('/'):
-                    send_media_to(message.chat.id, reddit_post(url, access_token=access_token(reddit)), with_caption=True)
+                    send_media_to(message.chat.id, message.message_id, reddit_post(url, access_token=access_token(reddit)), with_caption=True)
 def reddit_post(url, access_token):
     headers = {
         "Authorization": "{} {}".format(access_token['token_type'], access_token['access_token']),
@@ -415,7 +453,7 @@ def reddit_post(url, access_token):
     response = requests.get("https://oauth.reddit.com/api/info", headers=headers, params=params)
     if response.status_code == 200 and len(response.json()['data']['children']) > 0:
         return response.json()['data']['children'][0]
-def send_media_to(chat_id, post, with_caption = False):
+def send_media_to(chat_id, message_id, post, with_caption = False):
     try:
         if post['data']['domain'] == 'i.redd.it':
             extension = post['data']['url'].split('.').pop()
@@ -426,16 +464,20 @@ def send_media_to(chat_id, post, with_caption = False):
                     caption = '{} - {}'.format(post['data']['subreddit_name_prefixed'],
                                                              post['data']['title'])
                     bot.send_photo(chat_id, url, caption=caption)
+                    bot.delete_message(chat_id, message_id)
                 else:
                     bot.send_photo(chat_id, url)
+                    bot.delete_message(chat_id, message_id)
                 return True
             elif extension == 'gif':
                 if with_caption:
                     caption = '{} - {}'.format(post['data']['subreddit_name_prefixed'],
                                                post['data']['title'])
                     bot.send_video(chat_id, url, caption=caption)
+                    bot.delete_message(chat_id, message_id)
                 else:
                     bot.send_video(chat_id, url)
+                    bot.delete_message(chat_id, message_id)
                 return True
 
         elif post['data']['domain'] == 'gfycat.com':
@@ -446,8 +488,10 @@ def send_media_to(chat_id, post, with_caption = False):
                     caption = '{} - {}'.format(post['data']['subreddit_name_prefixed'],
                                                post['data']['title'])
                     bot.send_video(chat_id, url, caption=caption)
+                    bot.delete_message(chat_id, message_id)
                 else:
                     bot.send_video(chat_id, url)
+                    bot.delete_message(chat_id, message_id)
                 return True
 
             else:
@@ -471,8 +515,10 @@ def send_media_to(chat_id, post, with_caption = False):
                         caption = '{} - {}'.format(post['data']['subreddit_name_prefixed'],
                                                    post['data']['title'])
                         bot.send_photo(chat_id, url, caption=caption)
+                        bot.delete_message(chat_id, message_id)
                     else:
                         bot.send_photo(chat_id, url)
+                        bot.delete_message(chat_id, message_id)
                     return True
                 else:
                     return False
@@ -484,8 +530,10 @@ def send_media_to(chat_id, post, with_caption = False):
                         caption = '{} - {}'.format(post['data']['subreddit_name_prefixed'],
                                                    post['data']['title'])
                         bot.send_video(chat_id, url, caption=caption)
+                        bot.delete_message(chat_id, message_id)
                     else:
                         bot.send_video(chat_id, url)
+                        bot.delete_message(chat_id, message_id)
                     return True
                 else:
                     return False
@@ -496,11 +544,17 @@ def send_media_to(chat_id, post, with_caption = False):
                 caption = '{} - {}'.format(post['data']['subreddit_name_prefixed'],
                                            post['data']['title'])
                 bot.send_video(chat_id, url, caption=caption)
+                bot.delete_message(chat_id, message_id)
             else:
                 bot.send_video(chat_id, url)
+                bot.delete_message(chat_id, message_id)
             return True
         else:
-            return False
+            text='---\n{}\n{}\n{}\n---'.format(
+                post['data']['subreddit_name_prefixed'], post['data']['title'], post['data']['selftext'])
+            bot.send_message(chat_id, text)
+            bot.delete_message(chat_id, message_id)
+            return True
     except:
         return False
 def get_gfycat_link(url_id):

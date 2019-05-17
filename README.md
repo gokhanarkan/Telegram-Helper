@@ -41,3 +41,4 @@
 -----------
 
 She is currently living in a Raspberry Pi, working so hard and saving money to live in a cool apartment at AWS some day.
+Future edit: She has a cool apartment now!

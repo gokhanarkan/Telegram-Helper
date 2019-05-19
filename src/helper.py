@@ -41,6 +41,8 @@ def access_token(user):
 # initialise asyncio loop to use some functions from core telegram api
 loop = asyncio.get_event_loop()
 
+############################## Database Stuff ##############################
+
 @bot.message_handler(commands=['tables'])
 def createTables(message):
     if(message.from_user.id == BOT_ADMIN):  # To prevent to access only the admins can use the database
@@ -60,7 +62,6 @@ def createTables(message):
             pass
     else:
         bot.send_message(message.chat.id, "Owner permission is required.")
-
 @bot.message_handler(commands=['db'])
 def db(message):
     try:
@@ -83,6 +84,39 @@ def db(message):
             cur.close()
     except:
         pass
+# Changing user location without API call
+@bot.message_handler(commands=['location'])
+def location(message):
+    try:
+        try:
+            cur=connection.cursor()
+            msg=message.text.split('/location ')
+            if(len(msg) > 1):
+                try:
+                    cur.execute(
+                        "SELECT * FROM locations WHERE person = ?", (message.from_user.id,))
+                    value=cur.fetchone()
+                    if (value == None):
+                        cur.execute("INSERT INTO locations VALUES (?, ?)",
+                                    (message.from_user.id, msg[1]))
+                        connection.commit()
+                    else:
+                        cur.execute(
+                            "SELECT * FROM locations WHERE person = ?", (message.from_user.id,))
+                        cur.execute(
+                            "UPDATE locations SET location = ?", (msg[1],))
+                        connection.commit()
+                except:
+                    pass
+            else:
+                bot.reply_to(message, "Please type the city or street after the command.")
+        finally:
+            cur.close()
+    except:
+        pass
+
+############################################################################
+############################## Shouting Stuff ##############################
 
 # We play online games together and the group is muted almost always. This command is for in order to breach that mute barrier:
 @bot.message_handler(commands=['on'])
@@ -117,6 +151,9 @@ def kom(message):
         edited_message = '{}: {}'.format(message.from_user.first_name, msg[1])
         message_variable = telepot.message_identifier(sent_message)
         pot.editMessageText(message_variable, edited_message)
+
+###########################################################################
+############################## Weather Stuff ##############################
 
 # Now weather uses the database tables
 @bot.message_handler(commands=['weather'])
@@ -175,38 +212,6 @@ def fetchWeather(message, city):
         bot.reply_to(message, weather_message)
     except:
         bot.reply_to(message, 'Please define your location.')
-
-# Changing user location without API call
-@bot.message_handler(commands=['location'])
-def location(message):
-    try:
-        try:
-            cur=connection.cursor()
-            msg=message.text.split('/location ')
-            if(len(msg) > 1):
-                try:
-                    cur.execute(
-                        "SELECT * FROM locations WHERE person = ?", (message.from_user.id,))
-                    value=cur.fetchone()
-                    if (value == None):
-                        cur.execute("INSERT INTO locations VALUES (?, ?)",
-                                    (message.from_user.id, msg[1]))
-                        connection.commit()
-                    else:
-                        cur.execute(
-                            "SELECT * FROM locations WHERE person = ?", (message.from_user.id,))
-                        cur.execute(
-                            "UPDATE locations SET location = ?", (msg[1],))
-                        connection.commit()
-                except:
-                    pass
-            else:
-                bot.reply_to(message, "Please type the city or street after the command.")
-        finally:
-            cur.close()
-    except:
-        pass
-
 # Detailed weather in natural language
 @bot.message_handler(commands=['wdetail'])
 def weather(message):
@@ -241,6 +246,9 @@ def weather(message):
     else:
         bot.reply_to(
             message, "Please define location with the /location command.")
+
+###########################################################################
+############################## Youtube Stuff ##############################
 
 # YouTube video downloader
 # It might be illegal. I am not responsible.
@@ -293,7 +301,6 @@ def sendConfirmation(message, val):
         bot.reply_to(message, "Your video is on the way but it's larger than 50mb, so beware of a couple minutes delay.")
     else:
         bot.reply_to(message, "Video is on the way.")
-
 # I AM ALREADY A CRIMINAL BECAUSE OF THE PREVIOUS FUNCTION. SO WHY NOT CONVERT A YOUTUBE VIDEO TO A MUSIC FILE?
 @bot.message_handler(commands=['ytmusic'])
 def download_music(message):
@@ -330,6 +337,9 @@ def largeAudio(message):
     bot.reply_to(message, "Sorry, I can't send a music file larger than 50mb at the moment.")
 def audioConfirmation(message):
     bot.reply_to(message, "Your music is on the way.\nIt might take a few minutes.")
+
+##########################################################################
+############################## Conversion Stuff ##########################
 
 # Below, there are functions always working in the background and only be triggered if the specific words is used.
 # Don't need to command anything the bot will complete you flawlessly.
@@ -382,7 +392,6 @@ def currency(message):
                 words.remove(words[words.index(word)])
             except:
                 pass
-
 # Below are one line answers. I am keeping the turkish lira conversion message as a reference.
     one_line_answer = ''
     if len(answers) > 0:
@@ -396,46 +405,64 @@ def eur(amount, converted_amount):
 def usd(amount, converted_amount):
     return "${} approximately equals to {}₺.".format(round(amount, 2), round(converted_amount, 2))
 
+##########################################################################
+############################## Reddit Stuff ##############################
 
-# Reddit TOP POSTS generator for lazy people
-
+# Reddit top and hot posts generator for lazy people
 # Command operator
 @bot.message_handler(commands=['topr'])
 def retrieve_sub(message):
-    msg=message.text.split('/topr ')
-    if (len(msg) > 1):
+    msg = message.text.split(' ')
+    if (len(msg) > 2):
         try:
-            tops=top_posts(access_token(reddit), msg[1])
-            iterate_posts(tops, message)
+            if (int(msg[1]) > 100 or int(msg[1]) < 5):
+                bot.reply_to(message, "Please use a parameter between 5 and 100.")
+            else:
+                tops = grab_posts(access_token(reddit), int(msg[1]), msg[2], 0)
+                iterate_posts(tops, message, int(msg[1]))
         except:
             pass
-
-# Generating the top posts list with the authorization token
-def top_posts(access_token, subreddit):
-    headers={
+@bot.message_handler(commands=['hotr'])
+def hot_posts(message):
+    msg = message.text.split(' ')
+    if (len(msg) > 2):
+        try:
+            if(int(msg[1]) > 100 or int(msg[1]) < 5):
+                bot.reply_to(message, "Please use a parameter between 5 and 100.")
+            else:
+                hots = grab_posts(access_token(reddit), int(msg[1]), msg[2], 1)
+                iterate_posts(hots, message, int(msg[1]))
+        except:
+            pass
+# Generating the posts list with the authorization token
+def grab_posts(access_token, n, subreddit, identifier):
+    headers = {
         "Authorization": "{} {}".format(access_token['token_type'], access_token['access_token']),
         "User-Agent": access_token['user_agent']
-                            }
-    params={'t': 'all'}
-    link='https://oauth.reddit.com/r/' + subreddit + '/top'
-    response=requests.get(link, headers=headers, params=params)
+    }
+    if(identifier == 0):
+        params = {'t': 'all',
+                  'limit': n}
+        link = 'https://oauth.reddit.com/r/' + subreddit + '/top'
+    else:
+        params = {'limit': n}
+        link = 'https://oauth.reddit.com/r/' + subreddit + '/hot'
+    response = requests.get(link, headers=headers, params=params)
     return response.json()['data']['children']
-
 # Iterating the children of the data
-def iterate_posts(topList, message):
-    n=0
-    while(n < 25):
-        send_media_to(message.chat.id, message.message_id,
-                            topList[n], with_caption=True)
+def iterate_posts(postList, message, k):
+    n = 0
+    while(n<k):
+        send_media_to(message.chat.id, message.message_id, postList[n], with_caption=True)
         n += 1
 
 # Reddit Media Grabber
 # Takes the media embedded within the post and sends to the group chat within 1 to 3 seconds.
 # So participants of the message group don't need to switch between apps or click on the link.
 # Check the readme file for an example gif.
-# Below there are methods. The bot grabs everything smaller than 50mb. From Reddit, imgur, gfycat whatever you need.
+# The bot grabs everything smaller than 50mb. From Reddit, imgur, gfycat whatever you need.
 
-# Being lazy to comment things right now, that doesn't mean I code without comments, the comments were in my native tongue and I deleted it. I will add the english ones soon.
+# Being lazy to comment things right now, I'll add if needed.
 
 def is_reddit_link(message):
     if message.entities:
@@ -567,6 +594,8 @@ def get_gfycat_link(url_id):
         return data['content_urls']['mobile']['url'], True
     else:
         return data['mobileUrl'], False
+
+##########################################################################
 
 # Bot takes literally EVERY messages in the last 24 hours. I fixed that with the time object below.
 # It (she) only takes the last 10 minutes when she is booted.
